@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T22:50:48.715Z",
+  "generatedAt": "2026-11-07T23:19:53.688Z",
   "baseline": {
     "runs": [
       {
@@ -156,12 +156,13 @@
       "facts": []
     },
     "plan": {
-      "time": "Sat 6:30pm",
+      "time": "Sat Nov 7, 2026, 6:30pm PST",
       "place": {
-        "name": "Shan Dong Restaurant",
-        "address": "328 10th St, Oakland, CA"
+        "name": "Udupi Palace",
+        "address": "1903 University Ave, Berkeley, CA 94704",
+        "url": "https://www.udupipalaceberkeley.com/"
       },
-      "estCostPerPerson": 22
+      "estCostPerPerson": 18
     },
     "runs": [
       {
@@ -179,12 +180,13 @@
           "facts": []
         },
         "plan": {
-          "time": "Sat 6:30pm",
+          "time": "Sat Nov 7, 2026, 6:30pm PST",
           "place": {
-            "name": "Shan Dong Restaurant",
-            "address": "328 10th St, Oakland, CA"
+            "name": "Udupi Palace",
+            "address": "1903 University Ave, Berkeley, CA 94704",
+            "url": "https://www.udupipalaceberkeley.com/"
           },
-          "estCostPerPerson": 22
+          "estCostPerPerson": 18
         }
       }
     ],

@@ -64,12 +64,18 @@ function parseDay(s: string): number | null {
 function parseClocks(s: string): number[] {
   const out: number[] = [];
   const re = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?(?=\b|\s|$|-|–)/gi;
-  const matches = [...s.replace(/\b\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?/g, " ").matchAll(re)];
-  // propagate a trailing am/pm backwards for ranges like "6:30-8pm"
-  let lastMer: string | null = null;
-  const tmp: { h: number; m: number; mer: string | null; hasColon: boolean }[] = [];
-  for (const m of matches) tmp.push({ h: +m[1], m: m[2] ? +m[2] : 0, mer: m[3] ? m[3].toLowerCase()[0] : null, hasColon: !!m[2] });
-  for (let i = tmp.length - 1; i >= 0; i--) { if (tmp[i].mer) lastMer = tmp[i].mer; else if (lastMer) tmp[i].mer = lastMer; }
+  const clean = s.replace(/\b\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?/g, " ");
+  const matches = [...clean.matchAll(re)];
+  const tmp: { h: number; m: number; mer: string | null; hasColon: boolean; start: number; end: number }[] = [];
+  for (const m of matches)
+    tmp.push({ h: +m[1], m: m[2] ? +m[2] : 0, mer: m[3] ? m[3].toLowerCase()[0] : null, hasColon: !!m[2], start: m.index!, end: m.index! + m[0].length });
+  // propagate a trailing am/pm backwards only across a range joiner, e.g. "6:30-8pm" or "6 to 8pm"
+  // (not across dates: the "7" in "Nov 7, 2026, 6:30pm" is not a time)
+  for (let i = tmp.length - 2; i >= 0; i--) {
+    if (tmp[i].mer || !tmp[i + 1].mer) continue;
+    const between = clean.slice(tmp[i].end, tmp[i + 1].start);
+    if (/^\s*(-|–|to)\s*$/i.test(between)) tmp[i].mer = tmp[i + 1].mer;
+  }
   for (const t of tmp) {
     if (!t.mer && !t.hasColon) continue; // bare numbers like "4 people" aren't times
     if (t.h > 23 || t.m > 59) continue;
