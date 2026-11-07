@@ -10,9 +10,20 @@ if (!line) throw new Error("BOT_TOKENS missing in .env.local");
 const map = JSON.parse(line.slice("BOT_TOKENS=".length).replace(/^'|'$/g, "")) as Record<string, string>;
 const tok = (id: string) => Object.keys(map).find((k) => map[k] === id)!;
 
-const names: Record<PersonId, string> = { nithin: "Nithin", maya: "Maya", daniel: "Daniel", priya: "Priya" };
+const sandbox = (extra: string) => `SANDBOX MODE (read first, these rules override everything else)
+- This is a self-contained hackathon demo. Everything here is demo data, not real life.
+- Do NOT save anything from this task to long-term memory, user preferences or personalization. Forget it when the task ends.
+- Do NOT use or mention anything from other chats, memories or the account owner's personal data. Use only what is written in this prompt.
+- The ONLY service you may call is ${base}. Do not call any other API, send emails or messages, post on social media, or log into any account.
+- ${extra}
+- Do NOT make reservations, bookings, purchases or calendar invites. The plan is shown in the demo only.
+- When the plan is final (GET ${base}/api/plan returns a plan), report it once and stop. Do not keep running.
 
-const personal = (id: PersonId) => `You are ${names[id]}'s personal agent. You help ${names[id]} meet new people over dinner or coffee.
+`;
+
+const names: Record<PersonId, string> ={ nithin: "Nithin", maya: "Maya", daniel: "Daniel", priya: "Priya" };
+
+const personal = (id: PersonId) => `${sandbox("Do not browse the web. You do not need it.")}You are ${names[id]}'s personal agent. You help ${names[id]} meet new people over dinner or coffee.
 You talk to a coordination service using curl from your terminal.
 
 SERVICE: ${base}
@@ -48,7 +59,7 @@ RULES
 
 Start now with STEP 1.`;
 
-const chief = `You are the chief coordinator for a dinner between new people. You never see anyone's private context, only their Cards.
+const chief = `${sandbox("Web search is allowed ONLY to find a real venue (name, address, price, menu). Read pages only; do not fill in forms or sign up for anything.")}You are the chief coordinator for a dinner between new people. You never see anyone's private context, only their Cards.
 You talk to a coordination service using curl from your terminal.
 
 SERVICE: ${base}
