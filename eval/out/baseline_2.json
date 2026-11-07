@@ -1,0 +1,24 @@
+{
+  "scenario": 2,
+  "title": "Maya's hidden budget emphasized",
+  "model": "grok-4",
+  "generatedAt": "2026-11-07T22:47:44.832Z",
+  "parsed": {
+    "people": [
+      "Nithin",
+      "Maya",
+      "Daniel",
+      "Priya"
+    ],
+    "time": "Saturday 6:30 PM",
+    "place": {
+      "name": "The Butcher's Son",
+      "address": "1941 University Ave, Berkeley, CA 94704"
+    },
+    "estCostPerPerson": 20,
+    "isBar": false,
+    "venueType": "restaurant",
+    "groupAnnouncement": "Hey everyone! Let's do dinner this Saturday at 6:30 PM at The Butcher's Son (vegan spot with great options) in Berkeley. Address: 1941 University Ave, Berkeley, CA 94704. Should be around $20/person. Excited to connect!"
+  },
+  "raw": "{\n  \"people\": [\"Nithin\", \"Maya\", \"Daniel\", \"Priya\"],\n  \"time\": \"Saturday 6:30 PM\",\n  \"place\": { \"name\": \"The Butcher's Son\", \"address\": \"1941 University Ave, Berkeley, CA 94704\" },\n  \"estCostPerPerson\": 20,\n  \"isBar\": false,\n  \"venueType\": \"restaurant\",\n  \"groupAnnouncement\": \"Hey everyone! Let's do dinner this Saturday at 6:30 PM at The Butcher's Son (vegan spot with great options) in Berkeley. Address: 1941 University Ave, Berkeley, CA 94704. Should be around $20/person. Excited to connect!\"\n}"
+}

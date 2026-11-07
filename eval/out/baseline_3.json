@@ -1,0 +1,24 @@
+{
+  "scenario": 3,
+  "title": "Priya's caregiving emphasized",
+  "model": "grok-4",
+  "generatedAt": "2026-11-07T22:47:53.536Z",
+  "parsed": {
+    "people": [
+      "Nithin",
+      "Maya",
+      "Daniel",
+      "Priya"
+    ],
+    "time": "Saturday 6:30 PM",
+    "place": {
+      "name": "Udupi Palace",
+      "address": "2545 Telegraph Ave, Berkeley, CA 94704"
+    },
+    "estCostPerPerson": 20,
+    "isBar": false,
+    "venueType": "restaurant",
+    "groupAnnouncement": "Hey everyone! Let's do dinner this Saturday at 6:30 PM at Udupi Palace (2545 Telegraph Ave, Berkeley). It's a casual South Indian vegetarian spot with great affordable options. Looking forward to introducing you all—Nithin (AI agents + pricing), Maya (healthtech PM + clinical workflows), Daniel (coffee biz + Shopify), and Priya (robotics PhD). Should be a fun mix. See you there!"
+  },
+  "raw": "{\n  \"people\": [\"Nithin\", \"Maya\", \"Daniel\", \"Priya\"],\n  \"time\": \"Saturday 6:30 PM\",\n  \"place\": { \"name\": \"Udupi Palace\", \"address\": \"2545 Telegraph Ave, Berkeley, CA 94704\" },\n  \"estCostPerPerson\": 20,\n  \"isBar\": false,\n  \"venueType\": \"restaurant\",\n  \"groupAnnouncement\": \"Hey everyone! Let's do dinner this Saturday at 6:30 PM at Udupi Palace (2545 Telegraph Ave, Berkeley). It's a casual South Indian vegetarian spot with great affordable options. Looking forward to introducing you all—Nithin (AI agents + pricing), Maya (healthtech PM + clinical workflows), Daniel (coffee biz + Shopify), and Priya (robotics PhD). Should be a fun mix. See you there!\"\n}"
+}

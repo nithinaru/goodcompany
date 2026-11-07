@@ -1,0 +1,24 @@
+{
+  "scenario": 1,
+  "title": "Baseline fixtures (Daniel's hidden schedule is the binding constraint)",
+  "model": "grok-4",
+  "generatedAt": "2026-11-07T22:47:23.663Z",
+  "parsed": {
+    "people": [
+      "Nithin",
+      "Maya",
+      "Daniel",
+      "Priya"
+    ],
+    "time": "Saturday 6:30 PM",
+    "place": {
+      "name": "Gracias Madre",
+      "address": "2211 Mission St, San Francisco, CA 94110"
+    },
+    "estCostPerPerson": 25,
+    "isBar": false,
+    "venueType": "restaurant",
+    "groupAnnouncement": "Hey everyone, excited to get you all together! Let's do dinner this Saturday at 6:30 PM at Gracias Madre (2211 Mission St, San Francisco). It's a great vegetarian-friendly spot with solid options for everyone. Should be a nice mix of conversation around startups, robotics, and real-world ops. Hope you can make it!"
+  },
+  "raw": "{\n  \"people\": [\"Nithin\", \"Maya\", \"Daniel\", \"Priya\"],\n  \"time\": \"Saturday 6:30 PM\",\n  \"place\": { \"name\": \"Gracias Madre\", \"address\": \"2211 Mission St, San Francisco, CA 94110\" },\n  \"estCostPerPerson\": 25,\n  \"isBar\": false,\n  \"venueType\": \"restaurant\",\n  \"groupAnnouncement\": \"Hey everyone, excited to get you all together! Let's do dinner this Saturday at 6:30 PM at Gracias Madre (2211 Mission St, San Francisco). It's a great vegetarian-friendly spot with solid options for everyone. Should be a nice mix of conversation around startups, robotics, and real-world ops. Hope you can make it!\"\n}"
+}

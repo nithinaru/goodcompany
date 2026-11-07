@@ -1,10 +1,13 @@
 import { auth, handle, ok, options, readJson } from "@/lib/http";
 import { getScoreboard, log, putScoreboard } from "@/lib/db";
+import committed from "@/eval/out/results.json";
 
 export const dynamic = "force-dynamic";
 export const OPTIONS = options;
 
-export const GET = handle(async () => ok({ scoreboard: await getScoreboard() }));
+// Latest results posted by eval/score.ts; falls back to the committed eval/out/results.json
+// so the scoreboard survives restarts and fresh deploys.
+export const GET = handle(async () => ok({ scoreboard: (await getScoreboard()) ?? committed }));
 
 // Written by eval/score.ts with the admin token.
 export const POST = handle(async (req: Request) => {
