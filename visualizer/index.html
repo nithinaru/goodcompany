@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Good Company — Agent Visualizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #fff; overflow: hidden; }
+  body { font-family: Inter, -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+
+  #stage {
+    position: absolute; left: 50%; top: 50%;
+    width: 1440px; height: 900px;
+    transform-origin: center center;
+  }
+
+  /* ---------- lines ---------- */
+  svg.lines { position: absolute; inset: 0; width: 1440px; height: 900px; overflow: visible; pointer-events: none; }
+  svg.lines line { stroke-linecap: round; transition: opacity .5s ease; }
+
+  /* ---------- hub ---------- */
+  .hub {
+    position: absolute; left: 632px; top: 362px; width: 176px; height: 176px; border-radius: 50%;
+    background: radial-gradient(circle at 38% 28%, #3C3C3E 0%, #1A1A1C 55%, #0E0E10 100%);
+    border: 2px solid #050505;
+    box-shadow: 0 34px 60px rgba(0,0,0,.28), 0 8px 18px rgba(0,0,0,.18);
+    display: flex; align-items: center; justify-content: center;
+    transform: scale(.6); opacity: 0;
+    transition: transform .7s cubic-bezier(.2,1.4,.4,1), opacity .5s ease;
+    z-index: 5;
+  }
+  .hub.show { transform: scale(1); opacity: 1; }
+  .hub::after {
+    content: ""; position: absolute; inset: -2px; border-radius: 50%;
+    border: 1.5px solid rgba(17,17,17,.35); opacity: 0;
+  }
+  .hub.busy::after { animation: ring 1.6s ease-out infinite; }
+  @keyframes ring { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(1.45); opacity: 0; } }
+  .hub .face { transition: transform .4s ease; }
+  .hub.busy .face { animation: look 2.4s ease-in-out infinite; }
+  @keyframes look { 0%,100% { transform: translateX(0); } 30% { transform: translateX(3px); } 65% { transform: translateX(-3px); } }
+
+  /* ---------- pills ---------- */
+  .pill {
+    position: absolute; height: 56px;
+    display: flex; align-items: center; gap: 12px; padding: 0 22px 0 10px;
+    border-radius: 28px; color: #fff; white-space: nowrap;
+    font-weight: 600; font-size: 19px; letter-spacing: -.01em;
+    background: linear-gradient(90deg, #6E6E71 0%, #A9A9AC 100%);
+    box-shadow: 0 18px 36px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.25);
+    transform: rotate(-4deg) scale(.85); opacity: 0;
+    transition: opacity .45s ease, transform .55s cubic-bezier(.2,1.2,.3,1), filter .6s ease,
+                left .9s cubic-bezier(.65,0,.25,1), top .9s cubic-bezier(.65,0,.25,1), box-shadow .4s ease;
+    z-index: 4;
+  }
+  .pill::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    background: linear-gradient(90deg, #1C1C1E 0%, #505053 100%);
+    opacity: 0; transition: opacity .4s ease;
+  }
+  .pill > * { position: relative; }
+  .pill.show { opacity: 1; transform: rotate(-4deg) scale(1); }
+  .pill.light { background: linear-gradient(90deg, #C4C4C7 0%, #7A7A7D 100%); }
+  .pill.request { background: linear-gradient(90deg, #A9A9AC 0%, #5E5E61 100%); }
+  .pill.ghost { filter: blur(3px); opacity: .18; }
+  .pill.pending { opacity: .5; }
+  .pill.faded { opacity: .28; }
+  .pill.gone { opacity: .2; }
+  .pill.active { box-shadow: 0 22px 44px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.18); transform: rotate(-4deg) scale(1.04); opacity: 1; }
+  .pill.active::before, .pill.match::before { opacity: 1; }
+  .pill.match { opacity: 1; box-shadow: 0 22px 44px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.18); }
+  .avatar { position: relative; border-radius: 50%; overflow: hidden; flex-shrink: 0; box-shadow: 0 0 0 2px rgba(255,255,255,.9); }
+  .avatar .ini { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #2A2A2C; letter-spacing: -.02em; }
+  .avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .popup .who .avatar { box-shadow: none; }
+  .popup .whoav { display: flex; transition: opacity .2s ease; }
+  .icon { width: 36px; height: 36px; flex-shrink: 0; border-radius: 50%; background: #F4F4F4; display: flex; align-items: center; justify-content: center; }
+  .badge {
+    width: 0; height: 26px; margin-left: -12px; border-radius: 13px; background: #fff; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+    opacity: 0; transform: scale(.4);
+    transition: width .3s ease, margin .3s ease, opacity .3s ease, transform .4s cubic-bezier(.2,1.6,.4,1);
+  }
+  .badge.show { width: 26px; margin-left: 0; opacity: 1; transform: scale(1); }
+
+  /* ---------- bubbles ---------- */
+  .card {
+    position: absolute; background: #fff; border: 1px solid #EDEDED;
+    box-shadow: 0 30px 60px rgba(0,0,0,.12), 0 6px 14px rgba(0,0,0,.05);
+    opacity: 0; transition: opacity .45s ease, transform .55s cubic-bezier(.2,1.2,.3,1);
+    z-index: 6;
+  }
+  .ask { left: 120px; top: 236px; padding: 18px 22px; border-radius: 26px 26px 26px 8px;
+    font-weight: 600; font-size: 21px; line-height: 28px; letter-spacing: -.015em; color: #111;
+    transform: rotate(-4deg) translateY(14px) scale(.96); }
+  .ask.show { opacity: 1; transform: rotate(-4deg); }
+
+  .thought { left: 470px; top: 150px; display: flex; align-items: center; gap: 14px;
+    padding: 14px 22px 14px 14px; border-radius: 30px; transform: rotate(-3deg) translateY(14px) scale(.96); }
+  .thought.show { opacity: 1; transform: rotate(-3deg); }
+  .thought .mark { width: 36px; height: 36px; border-radius: 50%; background: #111; flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 3px; }
+  .thought .mark i { width: 5px; height: 5px; border-radius: 50%; background: #fff; animation: blink 1.2s infinite; }
+  .thought .mark i:nth-child(2) { animation-delay: .2s; } .thought .mark i:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%,100% { opacity: .25; } 40% { opacity: 1; } }
+  .thought .kicker { font-weight: 500; font-size: 13px; color: #8A8A8D; }
+  .thought .title { font-weight: 600; font-size: 20px; letter-spacing: -.01em; color: #111; white-space: nowrap; }
+  .thought .txt { transition: opacity .25s ease; }
+  .dot { position: absolute; border-radius: 50%; background: #F4F4F4; border: 1px solid #D6D6D6;
+    box-shadow: 0 6px 14px rgba(0,0,0,.08); opacity: 0; transform: scale(.3);
+    transition: opacity .3s ease, transform .4s cubic-bezier(.2,1.6,.4,1); z-index: 6; }
+  .dot.show { opacity: 1; transform: scale(1); }
+  .d1 { left: 636px; top: 256px; width: 20px; height: 20px; }
+  .d2 { left: 664px; top: 300px; width: 13px; height: 13px; }
+
+  /* ---------- popup ---------- */
+  .popup { left: 372px; top: 572px; width: 300px; padding: 16px; border-radius: 26px;
+    display: flex; flex-direction: column; gap: 4px; transform: rotate(-2deg) translateY(16px) scale(.95); }
+  .popup.show { opacity: 1; transform: rotate(-2deg); }
+  .popup .who { display: flex; align-items: center; gap: 10px; padding: 2px 4px 10px; font-weight: 600; font-size: 16px; color: #111; }
+  .popup .who span { transition: opacity .2s ease; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 16px; background: #F5F5F5; }
+  .row .ri { width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px; background: #fff; border: 1px solid #E6E6E6; display: flex; align-items: center; justify-content: center; }
+  .row .ri.bare { border: 0; background: none; }
+  .row .label { flex: 1; font-weight: 500; font-size: 15px; color: #111; }
+  .row .val { font-weight: 500; font-size: 14px; color: #8A8A8D; opacity: 0; transform: translateX(4px); transition: opacity .25s ease, transform .25s ease; }
+  .row .val.show { opacity: 1; transform: none; }
+  .row .val.bad { color: #111; }
+  .status { width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .status.wait { border: 2px solid #DADADA; border-top-color: #111; animation: spin .7s linear infinite; }
+  .status.yes { background: #111; animation: pop .35s cubic-bezier(.2,1.6,.4,1); }
+  .status.no { background: #fff; border: 1.5px solid #111; animation: pop .35s cubic-bezier(.2,1.6,.4,1); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pop { from { transform: scale(.3); } to { transform: scale(1); } }
+
+  /* ---------- DM (confirm) ---------- */
+  .dm { left: 130px; top: 488px; width: 372px; padding: 16px; border-radius: 26px;
+    display: flex; flex-direction: column; transform: rotate(-2deg) translateY(16px) scale(.95); color: #0F1419; }
+  .dm.show { opacity: 1; transform: rotate(-2deg); }
+  .dm .from { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; padding: 0 2px 10px; }
+  .dm .from .t { font-weight: 400; color: #536471; }
+  .grow { max-height: 0; opacity: 0; overflow: hidden; transition: max-height .5s cubic-bezier(.4,0,.2,1), opacity .3s ease, margin .4s ease; }
+  .grow.open { max-height: 320px; opacity: 1; }
+  .bubble { background: #EFF3F4; border-radius: 20px 20px 20px 6px; padding: 12px 14px; font-size: 16px; line-height: 22px; }
+  .typing { display: inline-flex; gap: 4px; padding: 14px 16px; }
+  .typing i { width: 7px; height: 7px; border-radius: 50%; background: #8B98A5; animation: blink 1.1s infinite; }
+  .typing i:nth-child(2) { animation-delay: .18s; } .typing i:nth-child(3) { animation-delay: .36s; }
+  .people { display: flex; flex-direction: column; gap: 10px; margin: 10px 0; }
+  .person { display: flex; align-items: center; gap: 10px; opacity: 0; transform: translateX(-6px); transition: opacity .35s ease, transform .35s ease; }
+  .person.show { opacity: 1; transform: none; }
+  .person .avatar { box-shadow: none; }
+  .person .n { font-weight: 600; font-size: 15px; line-height: 19px; }
+  .person .hd { font-size: 13px; line-height: 17px; color: #536471; }
+  .actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .actions.open { margin-top: 12px; }
+  .btn { height: 38px; padding: 0 18px; border-radius: 19px; font-weight: 600; font-size: 15px; display: flex; align-items: center; }
+  .btn.no { border: 1px solid #CFD9DE; background: #fff; }
+  .btn.yes { background: #0F1419; color: #fff; transition: transform .12s ease, box-shadow .2s ease; }
+  .btn.yes.hover { box-shadow: 0 0 0 4px rgba(15,20,25,.12); }
+  .btn.yes.press { transform: scale(.9); }
+  .sent { align-self: flex-end; background: #0F1419; color: #fff; border-radius: 20px 20px 6px 20px; padding: 10px 18px; font-size: 16px; line-height: 22px; }
+  .sentwrap { display: flex; flex-direction: column; }
+  .sentwrap.open { margin-top: 10px; }
+  .cursor { position: absolute; left: 1500px; top: 980px; z-index: 30; pointer-events: none;
+    transition: left 1.1s cubic-bezier(.45,0,.2,1), top 1.1s cubic-bezier(.45,0,.2,1), transform .12s ease, opacity .4s ease; }
+  .sentmeta { align-self: flex-end; font-size: 12px; color: #536471; margin-top: 4px; }
+  .cursor.press { transform: scale(.85); }
+
+  /* ---------- map scene ---------- */
+  #stage { z-index: 2; pointer-events: none; }
+  #all.leave > *:not(.hub):not(.booked):not(.cal) { opacity: 0 !important; transition: opacity .6s ease !important; }
+  #mapLayer { position: fixed; inset: 0; z-index: 1; background: #F1ECE4; opacity: 0; visibility: hidden;
+    transform: scale(1.22) translateY(-7%); transform-origin: 50% 60%; }
+  #mapLayer.show { visibility: visible; opacity: 1; transform: none;
+    transition: opacity 1s ease, transform 1.7s cubic-bezier(.2,.8,.2,1); }
+  #map { position: absolute; inset: 0; }
+  #mapLines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  #mapUI .mk { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+  .maplibregl-ctrl-attrib { font: 10px Inter, system-ui !important; opacity: .7; }
+
+  .mhub { display: flex; flex-direction: column; align-items: center; opacity: 0; }
+  .mhub.show { opacity: 1; }
+  .mhub .disc { width: 120px; height: 120px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: relative;
+    background: radial-gradient(circle at 38% 28%, #3C3C3E 0%, #1A1A1C 55%, #0E0E10 100%); border: 2px solid #050505;
+    box-shadow: 0 26px 44px rgba(0,0,0,.3); animation: bob 2.6s ease-in-out infinite; }
+  .mhub .disc::after { content: ""; position: absolute; inset: -2px; border-radius: 50%; border: 1.5px solid rgba(17,17,17,.4); opacity: 0; }
+  .mhub.busy .disc::after { animation: ring 1.4s ease-out infinite; }
+  .mhub .gap { height: 46px; }
+  .mhub .shadow { width: 90px; height: 16px; border-radius: 50%; background: radial-gradient(ellipse, rgba(0,0,0,.28), rgba(0,0,0,0) 70%); }
+  @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+  .rest { display: flex; flex-direction: column; align-items: center; opacity: 0; transition: opacity .4s ease; }
+  .rest.show { opacity: 1; }
+  .rest.no { opacity: .38; }
+  .rpill { height: 58px; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 10px; border-radius: 29px; color: #fff; white-space: nowrap;
+    position: relative; background: linear-gradient(90deg, #6E6E71 0%, #A9A9AC 100%);
+    box-shadow: 0 18px 36px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.25); transform: rotate(-4deg) scale(.85);
+    transition: transform .45s cubic-bezier(.2,1.3,.3,1), box-shadow .3s ease; }
+  .rest.show .rpill { transform: rotate(-4deg); }
+  .rest.active .rpill, .rest.yes .rpill { transform: rotate(-4deg) scale(1.05); box-shadow: 0 22px 44px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.18); }
+  .rpill::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(90deg, #1C1C1E 0%, #505053 100%); opacity: 0; transition: opacity .3s ease; }
+  .rest.active .rpill::before, .rest.yes .rpill::before { opacity: 1; }
+  .rpill > * { position: relative; }
+  .rpill .nm { font-weight: 600; font-size: 18px; letter-spacing: -.01em; line-height: 22px; }
+  .rpill .sub { font-weight: 500; font-size: 13px; line-height: 16px; color: rgba(255,255,255,.75); max-height: 0; opacity: 0; transition: max-height .3s ease, opacity .3s ease; }
+  .rpill .sub.show { max-height: 18px; opacity: 1; }
+  .rbadge { width: 0; margin-left: -12px; height: 26px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    transition: width .25s ease, margin .25s ease; }
+  .rbadge.wait, .rbadge.done { width: 26px; margin-left: 0; }
+  .rbadge.wait { border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; animation: spin .7s linear infinite; }
+  .rbadge.done { background: #fff; animation: pop .35s cubic-bezier(.2,1.6,.4,1); }
+  .rest .stem { width: 2px; height: 38px; background: linear-gradient(#3A3A3C, rgba(58,58,60,.2)); }
+  .rest .pin { width: 12px; height: 12px; border-radius: 50%; background: #111; border: 2.5px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3); margin-top: -2px; }
+
+  .booked { left: 110px; top: 610px; width: 360px; padding: 18px; border-radius: 26px; display: flex; flex-direction: column; gap: 14px;
+    transform: rotate(-2deg) translateY(18px) scale(.94); color: #0F1419; }
+  .booked.show { opacity: 1; transform: rotate(-2deg); }
+  .bk-top { display: flex; align-items: center; gap: 14px; }
+  .bk-check { width: 44px; height: 44px; border-radius: 50%; background: #111; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .bk-title { font-weight: 700; font-size: 22px; letter-spacing: -.02em; line-height: 26px; }
+  .bk-sub { font-weight: 500; font-size: 15px; color: #536471; line-height: 20px; }
+  .bk-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: 16px; background: #F5F5F5; }
+  .bk-meta { font-weight: 600; font-size: 15px; }
+  .bk-people { display: flex; }
+  .bk-people > * { margin-left: -8px; box-shadow: 0 0 0 2.5px #F5F5F5; border-radius: 50%; }
+  .bk-people > *:first-child { margin-left: 0; }
+
+  /* ---------- calendars ---------- */
+  #map, #mapUI, #mapLines { transition: opacity .5s ease, filter .5s ease; }
+  #mapLayer.dim #map { filter: saturate(.7) blur(1.5px); opacity: .55; }
+  #mapLayer.dim #mapUI, #mapLayer.dim #mapLines { opacity: .3; }
+  #mapLayer.show.out { opacity: 0; transform: scale(.82) translateY(14%); transition: opacity 1s ease, transform 1.5s cubic-bezier(.5,0,.2,1); }
+  .cal { left: 330px; top: 214px; width: 780px; padding: 18px 18px 20px; border-radius: 28px; transform: translateY(24px) scale(.96); color: #1F1F1F; }
+  .cal.show { opacity: 1; transform: none; }
+  .cal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 0 4px; }
+  .cal-title { font-weight: 700; font-size: 20px; letter-spacing: -.02em; line-height: 24px; }
+  .cal-date { font-size: 14px; color: #5F6368; font-weight: 500; }
+  .cal-status { margin-left: auto; display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; padding: 8px 14px; border-radius: 999px; background: #F1F3F4; }
+  .cal-status .sp { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #C4C7C5; border-top-color: #111; animation: spin .7s linear infinite; }
+  .cal-status .ok { width: 18px; height: 18px; border-radius: 50%; background: #111; display: flex; align-items: center; justify-content: center; animation: pop .35s cubic-bezier(.2,1.6,.4,1); }
+  .cal-grid { display: flex; }
+  .cal-gutter { width: 54px; flex-shrink: 0; padding-top: 44px; }
+  .cal-gutter div { height: 44px; font-size: 11px; color: #70757A; font-weight: 500; text-align: right; padding-right: 10px; transform: translateY(-7px); }
+  .cal-cols { flex: 1; display: flex; gap: 10px; position: relative; }
+  .cal-col { flex: 1; display: flex; flex-direction: column; opacity: 0; transform: translateY(10px); transition: opacity .35s ease, transform .4s ease; }
+  .cal-col.show { opacity: 1; transform: none; }
+  .cal-who { height: 44px; display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+  .cal-who .avatar { box-shadow: none; }
+  .cal-body { position: relative; height: 308px; border-left: 1px solid #E3E3E3;
+    background: repeating-linear-gradient(to bottom, #E8EAED 0 1px, transparent 1px 44px); }
+  .ev { position: absolute; left: 4px; right: 6px; border-radius: 6px; padding: 4px 8px; font-size: 12px; font-weight: 600; color: #fff; line-height: 15px;
+    overflow: hidden; opacity: 0; transform: scale(.9); transition: opacity .3s ease, transform .35s cubic-bezier(.2,1.4,.4,1); }
+  .ev small { display: block; font-weight: 500; opacity: .85; }
+  .ev.show { opacity: 1; transform: none; }
+  .ev.dinner { background: #111; z-index: 4; padding: 8px 10px; font-size: 13px; line-height: 17px; box-shadow: 0 8px 18px rgba(0,0,0,.18); transform: translateY(-16px) scale(.92); }
+  .ev.dinner.show { transform: none; }
+  .scan { position: absolute; left: -4px; right: -4px; height: 88px; border-radius: 10px; z-index: 3; pointer-events: none; opacity: 0;
+    background: rgba(26,115,232,.08); border: 1.5px solid rgba(26,115,232,.5);
+    transition: top .4s cubic-bezier(.4,0,.2,1), opacity .3s ease, background .25s ease, border-color .25s ease; }
+  .scan.show { opacity: 1; }
+  .scan.miss { background: rgba(234,67,53,.07); border-color: rgba(234,67,53,.55); }
+  .scan.hit { background: rgba(17,17,17,.04); border-color: #111; border-width: 2px; }
+  .scan-label { position: absolute; left: 50%; top: 50%; background: #111; color: #fff; font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 999px;
+    opacity: 0; transform: translate(-50%, -40%); transition: opacity .3s ease, transform .3s ease; white-space: nowrap; }
+  .scan.hit .scan-label { opacity: 1; transform: translate(-50%, -50%); }
+
+  /* ---------- group message ---------- */
+  .detail { display: flex; align-items: center; gap: 12px; background: #fff; border-radius: 14px; padding: 10px 12px; margin: 10px 0; }
+  .detail .icon { background: #F1F3F4; }
+  .detail .dn { font-weight: 700; font-size: 15px; line-height: 19px; }
+  .detail .dm2 { font-size: 13px; line-height: 17px; color: #536471; }
+  .to { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+  .to .stack { display: flex; }
+  .to .stack > * { margin-left: -6px; box-shadow: 0 0 0 2px #fff; border-radius: 50%; }
+  .to .stack > *:first-child { margin-left: 0; }
+  @keyframes ping { 0% { transform: rotate(-4deg) scale(1); } 40% { transform: rotate(-4deg) scale(1.1); } 100% { transform: rotate(-4deg) scale(1); } }
+  .pill.ping { animation: ping .55s ease; }
+
+  /* ---------- controls ---------- */
+  .hint { position: fixed; right: 18px; bottom: 14px; font: 500 12px Inter, system-ui; color: #9A9A9D; opacity: 0; transition: opacity .4s ease; }
+  body.mouse .hint { opacity: 1; }
+  .progress { position: fixed; left: 0; bottom: 0; height: 2px; background: #111; width: 0; opacity: .15; }
+  #all { transition: opacity .6s ease; }
+  #all.out { opacity: 0; }
+</style>
+</head>
+<body>
+<div id="mapLayer"><div id="map"></div><svg id="mapLines"></svg><div id="mapUI"></div></div>
+<div id="stage"><div id="all"></div></div>
+<div class="progress" id="progress"></div>
+<div class="hint">space · pause &nbsp;&nbsp; r · restart &nbsp;&nbsp; f · full screen</div>
+
+<script>
+/* ============ data ============ */
+const HUB = [720, 450];
+const SLOTS = [[1010,212],[1110,348],[1110,488],[1010,624]];
+/*
+  The four people your agent checks, in order.
+  To use a real person's X profile picture, set `x` to their X handle (no @),
+  e.g. x: 'nithinaru'. The handle shown on the pill then comes from `x` too.
+  Leave `x` empty to show an initials avatar instead.
+*/
+const AGENTS = [
+  { x: '', h: '@danabuilds',  name: 'Dana Whitfield', checks: [['Busy','no'],  ['Dinner','yes'], ['1.4 mi','yes']] },
+  { x: '', h: '@marcusleevc', name: 'Marcus Lee',     checks: [['Free','yes'], ['Dinner','yes'], ['0.8 mi','yes']] },
+  { x: '', h: '@amara_md',    name: 'Amara Okafor',   checks: [['Free','yes'], ['Coffee','yes'], ['1.1 mi','yes']] },
+  { x: '', h: '@jonahangel',  name: 'Jonah Price',    checks: [['Free','yes'], ['Dinner','yes'], ['In NYC','no']] },
+];
+AGENTS.forEach(a => {
+  a.ok = a.checks.every(c => c[1] === 'yes');
+  if (a.x) a.h = '@' + a.x.replace(/^@/, '');
+});
+const AVATAR_TINTS = ['#D8CCBC', '#BFCAD8', '#C8D4C0', '#D9C4CB'];
+const CONTEXT = [
+  { label: 'Memory',    pos: [220,168], end: [330,196], icon: 'spark' },
+  { label: 'X activity',pos: [110,272], end: [250,300], icon: 'x' },
+  { label: 'Calendar',  pos: [120,482], end: [250,510], icon: 'gcal' },
+  { label: 'Location',  pos: [230,590], end: [330,618], icon: 'pin' },
+];
+
+/* ============ icons ============ */
+const face = (size, bg, eye) => `<svg class="face" width="${size}" height="${size}" viewBox="0 0 88 88" fill="none"><circle cx="44" cy="44" r="44" fill="${bg}"/><rect x="28" y="36" width="13" height="30" rx="6.5" transform="rotate(-14 34.5 51)" fill="${eye}"/><rect x="47" y="34" width="13" height="30" rx="6.5" transform="rotate(-14 53.5 49)" fill="${eye}"/></svg>`;
+const HUBFACE = `<svg class="face" width="88" height="88" viewBox="0 0 88 88" fill="none"><defs><radialGradient id="fw" cx="0.38" cy="0.3" r="0.75"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E4E4E4"/></radialGradient></defs><circle cx="44" cy="44" r="44" fill="url(#fw)"/><rect x="28" y="36" width="13" height="30" rx="6.5" transform="rotate(-14 34.5 51)" fill="#232325"/><rect x="47" y="34" width="13" height="30" rx="6.5" transform="rotate(-14 53.5 49)" fill="#232325"/></svg>`;
+const GCAL = (s=30) => `<svg width="${s}" height="${s}" viewBox="0 0 30 30" fill="none"><rect width="30" height="30" rx="6" fill="#fff"/><path d="M6 0H24V7H6Z" fill="#4285F4"/><path d="M23 0H24C27.31 0 30 2.69 30 6V7H23Z" fill="#1967D2"/><path d="M0 6C0 2.69 2.69 0 6 0H7V23H0Z" fill="#4285F4"/><path d="M23 7H30V23H23Z" fill="#FBBC04"/><path d="M7 23H23V30H7Z" fill="#34A853"/><path d="M0 23H7V30H6C2.69 30 0 27.31 0 24Z" fill="#188038"/><path d="M23 23H30L23 30Z" fill="#EA4335"/><rect x="7" y="7" width="16" height="16" fill="#fff"/><text x="15" y="19.6" text-anchor="middle" font-family="Inter, sans-serif" font-weight="700" font-size="10" fill="#4285F4">31</text></svg>`;
+const XMARK = (c) => `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2.5 2H5.6L13.5 14H10.4Z" fill="${c}"/><path d="M13.2 2L2.8 14" stroke="${c}" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+const PIN = (c, hole) => `<svg width="14" height="16" viewBox="0 0 14 16" fill="none"><path d="M7 15C7 15 13 9.8 13 6.2C13 2.9 10.3 1 7 1C3.7 1 1 2.9 1 6.2C1 9.8 7 15 7 15Z" ${hole ? `fill="${c}"` : `stroke="${c}" stroke-width="1.6" stroke-linejoin="round"`}/><circle cx="7" cy="6.2" r="2" fill="${hole || c}"/></svg>`;
+const SPARK = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1.5V16.5M1.5 9H16.5M3.7 3.7L14.3 14.3M14.3 3.7L3.7 14.3" stroke="#6A6A6D" stroke-width="2" stroke-linecap="round"/></svg>`;
+const SLIDERS = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M2 8H14M2 12H14" stroke="#111" stroke-width="1.6" stroke-linecap="round"/><circle cx="10" cy="4" r="2" fill="#fff" stroke="#111" stroke-width="1.6"/><circle cx="5" cy="8" r="2" fill="#fff" stroke="#111" stroke-width="1.6"/><circle cx="11" cy="12" r="2" fill="#fff" stroke="#111" stroke-width="1.6"/></svg>`;
+const CHAT = `<svg width="36" height="36" viewBox="0 0 36 36" fill="none"><circle cx="18" cy="18" r="18" fill="#F4F4F4"/><path d="M11 13.5C11 12.12 12.12 11 13.5 11H22.5C23.88 11 25 12.12 25 13.5V19.5C25 20.88 23.88 22 22.5 22H16L12.5 25V22.2C11.63 21.85 11 21 11 20V13.5Z" fill="#8E8E91"/><rect x="14.5" y="14.5" width="7" height="1.6" rx=".8" fill="#F4F4F4"/><rect x="14.5" y="17.5" width="4.5" height="1.6" rx=".8" fill="#F4F4F4"/></svg>`;
+const CHECK = (c, s=12) => `<svg width="${s}" height="${s}" viewBox="0 0 14 14" fill="none"><path d="M2 7.5L5.5 11L12 3" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const CROSS = (c, s=10) => `<svg width="${s}" height="${s}" viewBox="0 0 14 14" fill="none"><path d="M2 2L12 12M12 2L2 12" stroke="${c}" stroke-width="2.6" stroke-linecap="round"/></svg>`;
+const ICONS = { spark: SPARK, x: XMARK('#6A6A6D'), gcal: GCAL(20), pin: PIN('#6A6A6D', '#F4F4F4') };
+
+// X profile picture (via unavatar.io) with an initials fallback underneath.
+function avatar(a, i, size) {
+  const initials = a.name.split(' ').map(w => w[0]).join('').slice(0, 2);
+  const ini = `<div class="ini" style="background:${AVATAR_TINTS[i % AVATAR_TINTS.length]};font-size:${Math.round(size * .38)}px">${initials}</div>`;
+  const img = a.x ? `<img src="https://unavatar.io/x/${encodeURIComponent(a.x.replace(/^@/, ''))}?fallback=false" alt="" onerror="this.remove()">` : '';
+  return `<div class="avatar" style="width:${size}px;height:${size}px">${ini}${img}</div>`;
+}
+
+/* ============ helpers ============ */
+const NS = 'http://www.w3.org/2000/svg';
+const $ = (s, r = document) => r.querySelector(s);
+function h(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; }
+function svgLine(svg, [x1, y1], [x2, y2], stroke, width = 1.5, extra = {}) {
+  const l = document.createElementNS(NS, 'line');
+  Object.entries({ x1, y1, x2, y2, stroke, 'stroke-width': width, ...extra }).forEach(([k, v]) => l.setAttribute(k, v));
+  l.style.opacity = 0;
+  svg.appendChild(l);
+  return l;
+}
+function draw(line, dur = 650) {
+  const len = Math.hypot(line.x2.baseVal.value - line.x1.baseVal.value, line.y2.baseVal.value - line.y1.baseVal.value);
+  if (line.getAttribute('stroke-dasharray') && !line.dataset.drawn) { line.style.opacity = 1; return; } // dashed tether
+  line.style.transition = 'none';
+  line.style.strokeDasharray = len; line.style.strokeDashoffset = len; line.style.opacity = 1;
+  line.getBoundingClientRect();
+  line.style.transition = `stroke-dashoffset ${dur}ms cubic-bezier(.4,0,.2,1), opacity .5s ease`;
+  line.style.strokeDashoffset = 0;
+}
+const show = (...els) => els.forEach(e => e.classList.add('show'));
+const hide = (...els) => els.forEach(e => e.classList.remove('show'));
+
+/* ============ timing (pause / restart aware) ============ */
+const params = new URLSearchParams(location.search);
+const SPEED = parseFloat(params.get('speed') || '1');
+const LOOP = params.get('loop') !== '0';
+let paused = false, runId = 0, clock = 0, last = performance.now();
+const TOTAL = 58000;
+(function tick(now) {
+  if (!paused) clock += (now - last) * SPEED;
+  last = now;
+  $('#progress').style.width = Math.min(100, clock / TOTAL * 100) + '%';
+  requestAnimationFrame(tick);
+})(performance.now());
+function wait(ms) {
+  const id = runId, until = clock + ms;
+  return new Promise((res, rej) => {
+    (function check() {
+      if (id !== runId) return rej('restart');
+      if (clock >= until) return res();
+      requestAnimationFrame(check);
+    })();
+  });
+}
+
+/* ============ build ============ */
+let S; // scene refs
+function build() {
+  const all = $('#all');
+  all.innerHTML = '';
+  all.classList.remove('out', 'leave');
+  resetMap();
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('class', 'lines'); svg.setAttribute('viewBox', '0 0 1440 900');
+  svg.innerHTML = `<defs>
+    <linearGradient id="gr" gradientUnits="userSpaceOnUse" x1="720" y1="0" x2="1160" y2="0"><stop offset="0" stop-color="#111"/><stop offset=".42" stop-color="#111"/><stop offset=".5" stop-color="#D4D4D4"/><stop offset=".58" stop-color="#111"/><stop offset="1" stop-color="#444"/></linearGradient>
+    <linearGradient id="gl" gradientUnits="userSpaceOnUse" x1="720" y1="0" x2="250" y2="0"><stop offset="0" stop-color="#111"/><stop offset=".45" stop-color="#111"/><stop offset=".52" stop-color="#D4D4D4"/><stop offset=".6" stop-color="#111"/><stop offset="1" stop-color="#666"/></linearGradient></defs>`;
+  all.appendChild(svg);
+
+  const hub = h(`<div class="hub">${HUBFACE}</div>`);
+  const ask = h(`<div class="card ask">I'm free 6–8 PM tonight.<br>Find me some good company.</div>`);
+  const request = h(`<div class="pill request" style="left:150px;top:376px">${CHAT}<span>6–8 PM tonight</span></div>`);
+  const thought = h(`<div class="card thought"><div class="mark"><i></i><i></i><i></i></div><div class="txt"><div class="kicker">Thinking</div><div class="title">Pulling from your context</div></div></div>`);
+  const d1 = h(`<div class="dot d1"></div>`), d2 = h(`<div class="dot d2"></div>`);
+  const popup = h(`<div class="card popup">
+      <div class="who"><div class="whoav"></div><span class="handle">@handle</span></div>
+      <div class="row"><div class="ri bare">${GCAL(30)}</div><div class="label">Calendar</div><div class="val"></div><div class="status"></div></div>
+      <div class="row"><div class="ri">${SLIDERS}</div><div class="label">Preferences</div><div class="val"></div><div class="status"></div></div>
+      <div class="row"><div class="ri">${PIN('#111')}</div><div class="label">Location</div><div class="val"></div><div class="status"></div></div>
+    </div>`);
+
+  const matches = AGENTS.map((a, i) => ({ a, i })).filter(m => m.a.ok);
+  const dm = h(`<div class="card dm">
+      <div class="from">${face(24, '#1C1C1E', '#fff')}<span>Good Company</span><span class="t">· now</span></div>
+      <div class="grow typingwrap"><div class="bubble typing"><i></i><i></i><i></i></div></div>
+      <div class="grow msg"><div class="bubble">Found these ${matches.length} people:
+        <div class="people">${matches.map(m => `<div class="person">${avatar(m.a, m.i, 34)}<div><div class="n">${m.a.name}</div><div class="hd">${m.a.h}</div></div></div>`).join('')}</div>
+        Want to confirm?</div></div>
+      <div class="grow actions"><div class="btn no">Not now</div><div class="btn yes">Yes</div></div>
+      <div class="grow sentwrap"><div class="sent">Yes</div><div class="sentmeta">Sent</div></div>
+    </div>`);
+  const win = RESTAURANTS.find(r => r.ok);
+  const booked = h(`<div class="card booked">
+      <div class="bk-top"><div class="bk-check">${CHECK('#fff', 20)}</div>
+        <div><div class="bk-title">Reservation booked</div><div class="bk-sub">${win.name} · SoMa</div></div></div>
+      <div class="bk-row"><div class="bk-meta">Tonight · 6–8 PM · 3 people</div>
+        <div class="bk-people">${face(30, '#1C1C1E', '#fff')}${matches.map(m => avatar(m.a, m.i, 30)).join('')}</div></div>
+    </div>`);
+  // three Google-Calendar-style day views: you + the two matches
+  const people = [{ name: 'You', av: face(26, '#1C1C1E', '#fff') },
+    ...matches.map(m => ({ name: m.a.name.split(' ')[0], av: avatar(m.a, m.i, 26) }))];
+  const hr = t => `${((Math.floor(t) + 11) % 12) + 1}${t % 1 ? ':' + String(Math.round(t % 1 * 60)).padStart(2, '0') : ''}`;
+  const evHTML = ([s, e, title, color], cls = '') =>
+    `<div class="ev ${cls}" style="top:${(s - 15) * 44 + 1}px;height:${(e - s) * 44 - 3}px${color ? `;background:${color}` : ''}">${title}${e - s >= .75 ? `<small>${hr(s)} – ${hr(e)} PM</small>` : ''}</div>`;
+  const cal = h(`<div class="card cal">
+      <div class="cal-head">${GCAL(26)}<div><div class="cal-title">Tonight</div><div class="cal-date">Sat, Nov 7</div></div>
+        <div class="cal-status"><div class="sp"></div><span>Opening calendars</span></div></div>
+      <div class="cal-grid">
+        <div class="cal-gutter">${[3,4,5,6,7,8,9].map(t => `<div>${t} PM</div>`).join('')}</div>
+        <div class="cal-cols">
+          ${people.map((p, i) => `<div class="cal-col"><div class="cal-who">${p.av}<span>${p.name}</span></div>
+            <div class="cal-body">${(CAL_EVENTS[i] || []).map(ev => evHTML(ev)).join('')}${evHTML([18, 20, `Dinner · ${win.name}`, ''], 'dinner')}</div></div>`).join('')}
+          <div class="scan" style="top:44px"><div class="scan-label">6 – 8 PM · free for all ${people.length}</div></div>
+        </div>
+      </div>
+    </div>`);
+  const group = h(`<div class="card dm group">
+      <div class="from">${face(24, '#1C1C1E', '#fff')}<span>Good Company</span>
+        <div class="to"><span class="t">to</span><div class="stack">${face(22, '#1C1C1E', '#fff')}${matches.map(m => avatar(m.a, m.i, 22)).join('')}</div></div></div>
+      <div class="grow typingwrap"><div class="bubble typing"><i></i><i></i><i></i></div></div>
+      <div class="grow msg"><div class="bubble">Dinner's booked for tonight!
+        <div class="detail"><div class="icon">${FORK}</div><div><div class="dn">${win.name}</div>
+          <div class="dm2">Tonight · 6–8 PM · ${people.length} people</div><div class="dm2">Added to everyone's calendar</div></div></div>
+        See you soon!</div></div>
+      <div class="grow sentwrap"><div class="sentmeta">Sent to ${people.length}</div></div>
+    </div>`);
+  const cursor = h(`<div class="cursor"><svg width="26" height="30" viewBox="0 0 26 30" fill="none"><path d="M3 2V24L9 18.5L13 27.5L17 25.7L13 17H21Z" fill="#0F1419" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg></div>`);
+
+  const reqLine = svgLine(svg, [350, 404], HUB, 'url(#gl)');
+  const ctx = CONTEXT.map(c => ({
+    pill: h(`<div class="pill light" style="left:${c.pos[0]}px;top:${c.pos[1]}px"><div class="icon">${ICONS[c.icon]}</div><span>${c.label}</span></div>`),
+    line: svgLine(svg, c.end, HUB, 'url(#gl)'),
+  }));
+  const agents = AGENTS.map((a, i) => {
+    const p = h(`<div class="pill" style="left:${SLOTS[i][0]}px;top:${SLOTS[i][1]}px">${avatar(a, i, 36)}<span>${a.h}</span><div class="badge">${a.ok ? CHECK('#111') : CROSS('#111')}</div></div>`);
+    return { ...a, pill: p, line: svgLine(svg, HUB, [SLOTS[i][0] + 12, SLOTS[i][1] + 28], 'url(#gr)') };
+  });
+  const active = svgLine(svg, HUB, HUB, '#111', 2.5);
+  const tether = svgLine(svg, [676, 522], [566, 584], '#111', 1.6, { 'stroke-dasharray': '1 7' });
+  const dmTether = svgLine(svg, [664, 514], [500, 556], '#111', 1.6, { 'stroke-dasharray': '1 7' });
+
+  [request, ...ctx.map(c => c.pill), ...agents.map(a => a.pill), hub, ask, thought, d1, d2, popup, dm, group, cal, booked, cursor].forEach(e => all.appendChild(e));
+  S = { svg, hub, ask, request, reqLine, thought, d1, d2, ctx, agents, active, tether, popup, dm, dmTether, group, cal, booked, cursor };
+}
+
+function setThought(kicker, title, iconHTML) {
+  const txt = $('.txt', S.thought), mark = $('.mark', S.thought);
+  txt.style.opacity = 0;
+  setTimeout(() => {
+    $('.kicker', S.thought).textContent = kicker;
+    $('.title', S.thought).textContent = title;
+    if (iconHTML) mark.innerHTML = iconHTML;
+    txt.style.opacity = 1;
+  }, 250);
+}
+
+// centre of an element, in 1440×900 stage coordinates
+function stagePoint(el) {
+  const st = $('#stage').getBoundingClientRect(), s = st.width / 1440, r = el.getBoundingClientRect();
+  return { x: (r.left + r.width / 2 - st.left) / s, y: (r.top + r.height / 2 - st.top) / s };
+}
+
+function aimActive(i) {
+  const [x, y] = [SLOTS[i][0] + 12, SLOTS[i][1] + 28];
+  S.active.setAttribute('x2', x); S.active.setAttribute('y2', y);
+  draw(S.active, 450);
+}
+
+/* ============ sequence ============ */
+async function run() {
+  const id = ++runId;
+  clock = 0;
+  build();
+  try {
+    if (params.get('start') === 'map') { show(S.hub); await wait(1500); }
+    else {
+    await wait(300);  show(S.hub);
+    await wait(700);  show(S.ask);
+    await wait(1500); show(S.request); draw(S.reqLine);
+
+    // context
+    await wait(1400); hide(S.ask);
+    S.hub.classList.add('busy');
+    show(S.thought); await wait(150); show(S.d2); await wait(120); show(S.d1);
+    for (const c of S.ctx) { await wait(380); show(c.pill); draw(c.line, 550); }
+    await wait(1700);
+
+    // search X
+    S.ctx.forEach(c => { hide(c.pill); c.line.style.opacity = 0; });
+    setThought('Looking through X', 'Healthcare founders & investors',
+      `<div style="display:flex">${XMARK('#fff')}</div>`);
+    await wait(500);
+    for (const a of S.agents) { a.pill.classList.add('ghost'); show(a.pill); a.line.style.transition = 'opacity .6s'; a.line.style.opacity = .15; await wait(90); }
+    await wait(1600);
+
+    // seven agents resolve
+    hide(S.thought, S.d1, S.d2);
+    for (const a of S.agents) { a.pill.classList.remove('ghost'); draw(a.line, 500); await wait(140); }
+    await wait(1500);
+
+    // checks
+    S.agents.forEach(a => { a.line.style.opacity = .3; a.pill.classList.add('pending'); });
+    show(S.popup); draw(S.tether);
+    for (let i = 0; i < S.agents.length; i++) {
+      const a = S.agents[i];
+      a.pill.classList.remove('pending'); a.pill.classList.add('active');
+      aimActive(i);
+      const who = $('.who .handle', S.popup), whoAv = $('.whoav', S.popup);
+      who.style.opacity = 0; whoAv.style.opacity = 0;
+      const rows = [...S.popup.querySelectorAll('.row')];
+      rows.forEach(r => { const v = $('.val', r), s = $('.status', r); v.className = 'val'; v.textContent = ''; s.className = 'status'; s.innerHTML = ''; });
+      await wait(200);
+      who.textContent = a.h; who.style.opacity = 1;
+      whoAv.innerHTML = avatar(a, i, 28); whoAv.style.opacity = 1;
+      for (let r = 0; r < 3; r++) {
+        const [value, res] = a.checks[r];
+        const v = $('.val', rows[r]), s = $('.status', rows[r]);
+        s.className = 'status wait';
+        await wait(330);
+        v.textContent = value; v.className = 'val show' + (res === 'no' ? ' bad' : '');
+        s.className = 'status ' + res;
+        s.innerHTML = res === 'yes' ? CHECK('#fff', 11) : CROSS('#111', 9);
+      }
+      await wait(250);
+      $('.badge', a.pill).classList.add('show');
+      await wait(750);
+      a.pill.classList.remove('active');
+      if (!a.ok) a.pill.classList.add('faded');
+      S.active.style.opacity = 0;
+      await wait(150);
+    }
+    hide(S.popup); S.tether.style.opacity = 0;
+    S.hub.classList.remove('busy');
+    await wait(500);
+
+    // matches rise to the top
+    S.agents.forEach(a => a.line.style.opacity = 0);
+    await wait(300);
+    const order = [...S.agents.filter(a => a.ok), ...S.agents.filter(a => !a.ok)];
+    order.forEach((a, slot) => {
+      a.pill.style.left = SLOTS[slot][0] + 'px';
+      a.pill.style.top = SLOTS[slot][1] + 'px';
+      a.pill.classList.remove('faded', 'pending');
+      a.pill.classList.add(a.ok ? 'match' : 'gone');
+      a.finalSlot = slot;
+    });
+    await wait(1000);
+    for (const a of order) {
+      const end = [SLOTS[a.finalSlot][0] + 12, SLOTS[a.finalSlot][1] + 28];
+      const l = svgLine(S.svg, HUB, end, a.ok ? '#111' : '#E2E2E2', a.ok ? 2.5 : 1.5);
+      S.svg.insertBefore(l, S.svg.firstChild.nextSibling);
+      draw(l, 550);
+      a.finalLine = l;
+      await wait(a.ok ? 180 : 60);
+    }
+
+    // confirm by DM
+    await wait(900);
+    const part = s => $(s, S.dm);
+    S.hub.classList.add('busy');
+    show(S.dm); draw(S.dmTether);
+    part('.typingwrap').classList.add('open');
+    await wait(1300);
+    part('.typingwrap').classList.remove('open');
+    part('.msg').classList.add('open');
+    S.hub.classList.remove('busy');
+    for (const p of S.dm.querySelectorAll('.person')) { await wait(260); p.classList.add('show'); }
+    await wait(450);
+    part('.actions').classList.add('open');
+    await wait(1300);
+
+    // the click
+    const yes = part('.btn.yes'), at = stagePoint(yes);
+    S.cursor.style.left = (at.x - 3) + 'px';
+    S.cursor.style.top = (at.y - 2) + 'px';
+    await wait(1150); yes.classList.add('hover');
+    await wait(300);  yes.classList.add('press'); S.cursor.classList.add('press');
+    await wait(150);  yes.classList.remove('press'); S.cursor.classList.remove('press');
+    S.cursor.style.left = (at.x + 90) + 'px'; S.cursor.style.top = (at.y + 70) + 'px'; S.cursor.style.opacity = 0;
+    await wait(250);
+    part('.actions').classList.remove('open');
+    part('.sentwrap').classList.add('open');
+
+    await wait(1700);
+    } // end of network part
+
+    // to the map: book the table, fill everyone's calendar
+    await mapBeat();
+    // back up to the network: tell everyone
+    await flyBack();
+    await groupMessage();
+
+    await wait(6000);
+    if (LOOP) { $('#all').classList.add('out'); await wait(800); run(); }
+  } catch (e) { if (e !== 'restart') throw e; }
+}
+
+/* ============ map scene ============ */
+// Your bot lands here (SoMa, SF). Restaurant names are placeholders on real streets.
+const HUB_LL = [-122.4010, 37.7843];
+const CAM = { center: [-122.4006, 37.7845], zoom: 16.6, pitch: 62, bearing: -28 };
+const RESTAURANTS = [
+  { name: 'Ember Room',    ll: [-122.3972, 37.7867], ok: false, why: 'Full until 9 PM' },
+  { name: 'Sora Kitchen',  ll: [-122.4040, 37.7869], ok: false, why: 'Over budget' },
+  { name: 'Fig & Thistle', ll: [-122.3983, 37.7829], ok: true,  why: 'Table for 3 tonight' },
+];
+// made-up calendar events [start hour, end hour, title, colour] for You, then each match.
+// 6–8 PM is left free for everyone.
+const CAL_EVENTS = [
+  [[15, 16.5, 'Demo prep', '#039BE5'], [16.5, 17.5, 'Hackathon demos', '#8E24AA'], [20.5, 21.5, 'Call with Nithin', '#33B679']],
+  [[15, 16, 'Partner meeting', '#33B679'], [16.75, 17.75, 'Founder call', '#F4511E'], [20, 21, 'Gym', '#7986CB']],
+  [[15.5, 17.25, 'Clinic', '#E67C73'], [17.5, 18, 'Commute', '#616161'], [21, 22, 'Yoga', '#0B8043']],
+];
+// screen positions to use if the map can't load (offline)
+const FB_HUB = [.47, .7], FB_REST = [[.7, .4], [.3, .38], [.66, .8]];
+const FORK = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M5 2V7.5C5 8.6 5.9 9.5 7 9.5M5 2V16M2.8 2V6.5C2.8 8.2 3.8 9.5 5 9.5M7.2 2V6.5" stroke="#6A6A6D" stroke-width="1.6" stroke-linecap="round"/><path d="M12.5 16V10.5M12.5 10.5C11 10.5 10.5 8.5 10.5 6.5C10.5 4 11.3 2 12.5 2C13.7 2 14.5 4 14.5 6.5C14.5 8.5 14 10.5 12.5 10.5Z" stroke="#6A6A6D" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+let map = null, mapReady = false, scene = null;
+function initMap() {
+  if (!window.maplibregl) return;
+  try {
+    map = new maplibregl.Map({
+      container: 'map', style: 'https://tiles.openfreemap.org/styles/liberty', ...CAM,
+      interactive: false, attributionControl: { compact: true }, fadeDuration: 0,
+    });
+    map.on('load', () => {
+      for (const l of map.getStyle().layers) {
+        if (l.type === 'fill-extrusion') {
+          map.setPaintProperty(l.id, 'fill-extrusion-color', '#EEE8DE');
+          map.setPaintProperty(l.id, 'fill-extrusion-opacity', 0.97);
+        }
+        if (l.type === 'background') map.setPaintProperty(l.id, 'background-color', '#F3EFE8');
+      }
+      // soft, warm light so building sides stay beige instead of gray
+      map.setLight({ anchor: 'viewport', color: '#FFF8EE', intensity: 0.22, position: [1.4, 200, 35] });
+      mapReady = true;
+    });
+    map.on('error', e => console.warn('map:', e && e.error && e.error.message));
+  } catch (e) { console.warn('map unavailable', e); }
+}
+const vp = () => ({ w: innerWidth, h: innerHeight, s: Math.min(innerWidth / 1440, innerHeight / 900) });
+// zoom out on screens narrower than 16:10 so the bot and all restaurants stay in frame
+const camFor = () => { const v = vp(), a = (v.w / v.h) / (1440 / 900); return { ...CAM, zoom: CAM.zoom + Math.log2(Math.min(1, a)) }; };
+function proj(ll, fb) {
+  if (mapReady) { const p = map.project(ll); return { x: p.x, y: p.y }; }
+  const v = vp(); return { x: fb[0] * v.w, y: fb[1] * v.h };
+}
+// anchor an element's bottom-centre on a screen point, scaled like the stage
+function place(el, p, s) { el.style.transform = `translate(${p.x}px, ${p.y}px) scale(${s}) translate(-50%, -100%)`; }
+
+function resetMap() {
+  $('#mapLayer').classList.remove('show');
+  $('#mapUI').innerHTML = ''; $('#mapLines').innerHTML = '';
+  scene = null;
+  if (mapReady) { map.stop(); map.resize(); map.jumpTo(camFor()); }
+}
+addEventListener('resize', () => { if (map) map.resize(); });
+function buildScene() {
+  const ui = $('#mapUI');
+  const hub = h(`<div class="mk mhub"><div class="disc">${HUBFACE.replace('width="88" height="88"', 'width="60" height="60"')}</div><div class="gap"></div><div class="shadow"></div></div>`);
+  ui.appendChild(hub);
+  const rests = RESTAURANTS.map((r, i) => {
+    const el = h(`<div class="mk rest"><div class="rpill"><div class="icon">${FORK}</div><div><div class="nm">${r.name}</div><div class="sub">${r.why}</div></div><div class="rbadge"></div></div><div class="stem"></div><div class="pin"></div></div>`);
+    ui.appendChild(el);
+    return { ...r, i, el, badge: $('.rbadge', el), sub: $('.sub', el) };
+  });
+  scene = { hub, rests, lines: [] };
+  layout();
+}
+function addLine(r, color, width, dur) {
+  const el = document.createElementNS(NS, 'line');
+  el.setAttribute('stroke', color); el.setAttribute('stroke-width', width); el.setAttribute('stroke-linecap', 'round');
+  el.style.transition = 'opacity .4s ease';
+  $('#mapLines').appendChild(el);
+  const L = { el, target: () => proj(r.ll, FB_REST[r.i]), t0: performance.now(), dur };
+  scene.lines.push(L);
+  return L;
+}
+function layout() {
+  if (!scene) return;
+  const v = vp();
+  place(scene.hub, proj(HUB_LL, FB_HUB), v.s);
+  scene.rests.forEach(r => place(r.el, proj(r.ll, FB_REST[r.i]), v.s));
+  const d = $('.disc', scene.hub).getBoundingClientRect(), o = { x: d.left + d.width / 2, y: d.top + d.height / 2 };
+  for (const L of scene.lines) {
+    const t = L.target(), k = Math.min(1, (performance.now() - L.t0) / L.dur), e = 1 - Math.pow(1 - k, 3);
+    L.el.setAttribute('x1', o.x); L.el.setAttribute('y1', o.y);
+    L.el.setAttribute('x2', o.x + (t.x - o.x) * e); L.el.setAttribute('y2', o.y + (t.y - o.y) * e);
+  }
+}
+(function loop() { layout(); requestAnimationFrame(loop); })();
+
+async function mapBeat() {
+  // the bot flies down out of the network and lands on the map
+  if (mapReady) { map.stop(); map.resize(); map.jumpTo(camFor()); }
+  buildScene();
+  $('#all').classList.add('leave');
+  $('#mapLayer').classList.add('show');
+  const v = vp(), g = proj(HUB_LL, FB_HUB), st = $('#stage').getBoundingClientRect();
+  const tx = (g.x - st.left) / v.s, ty = (g.y - 122 * v.s - st.top) / v.s;
+  S.hub.style.transition = 'transform 1.6s cubic-bezier(.55,0,.25,1)';
+  S.hub.style.transform = `translate(${tx - 720}px, ${ty - 450}px) scale(${120 / 176})`;
+  await wait(1650);
+  scene.hub.classList.add('show'); S.hub.style.opacity = 0;
+  if (mapReady) map.easeTo({ bearing: -18, zoom: camFor().zoom + .1, duration: 16000, easing: t => t });
+  for (const r of scene.rests) { await wait(180); r.el.classList.add('show'); }
+  await wait(700);
+
+  // quick checks: X, X, check
+  scene.hub.classList.add('busy');
+  for (const r of scene.rests) {
+    const L = addLine(r, '#111', 2.5, 380);
+    r.el.classList.add('active');
+    r.badge.className = 'rbadge wait';
+    await wait(650);
+    r.badge.className = 'rbadge done';
+    r.badge.innerHTML = r.ok ? CHECK('#111', 12) : CROSS('#111', 10);
+    r.sub.classList.add('show');
+    await wait(450);
+    r.el.classList.remove('active');
+    r.el.classList.add(r.ok ? 'yes' : 'no');
+    if (!r.ok) L.el.style.opacity = 0;
+    await wait(150);
+  }
+  await wait(500);
+  await calendarBeat();
+  scene.hub.classList.remove('busy');
+  show(S.booked);
+  await wait(2600);
+}
+
+async function calendarBeat() {
+  const c = S.cal, status = $('.cal-status', c);
+  const setStatus = (text, done) => { status.innerHTML = `${done ? `<div class="ok">${CHECK('#fff', 10)}</div>` : '<div class="sp"></div>'}<span>${text}</span>`; };
+  // open everyone's calendar over the dimmed map
+  $('#mapLayer').classList.add('dim');
+  show(c);
+  for (const col of c.querySelectorAll('.cal-col')) { await wait(160); col.classList.add('show'); }
+  for (const ev of c.querySelectorAll('.ev:not(.dinner)')) { await wait(55); ev.classList.add('show'); }
+  await wait(400);
+  setStatus('Finding a time');
+  // sweep down: conflicts, then 6–8 PM is free for everyone
+  const scan = $('.scan', c);
+  for (const h of [15, 16, 17, 18]) {
+    scan.style.top = (44 + (h - 15) * 44) + 'px';
+    scan.className = 'scan show';
+    await wait(420);
+    scan.classList.add(h === 18 ? 'hit' : 'miss');
+    await wait(h === 18 ? 900 : 260);
+  }
+  setStatus(`Reserving at ${RESTAURANTS.find(r => r.ok).name}`);
+  await wait(1000);
+  setStatus('Table reserved', true);
+  await wait(500);
+  scan.style.opacity = 0;
+  for (const ev of c.querySelectorAll('.ev.dinner')) { ev.classList.add('show'); await wait(240); }
+  setStatus(`Added to ${c.querySelectorAll('.ev.dinner').length} calendars`, true);
+  await wait(1600);
+  hide(c);
+  $('#mapLayer').classList.remove('dim');
+  await wait(450);
+}
+
+async function flyBack() {
+  hide(S.booked);
+  // put the network back the way we want to return to it
+  hide(S.dm); S.dmTether.style.opacity = 0;
+  S.agents.filter(a => !a.ok).forEach(a => { hide(a.pill); a.pill.style.opacity = 0; if (a.finalLine) a.finalLine.style.opacity = 0; });
+  // hand the bot back from the map to the stage at the exact same spot, then fly it up
+  const d = $('.disc', scene.hub).getBoundingClientRect(), st = $('#stage').getBoundingClientRect(), s = vp().s;
+  const tx = (d.left + d.width / 2 - st.left) / s, ty = (d.top + d.height / 2 - st.top) / s;
+  S.hub.style.transition = 'none';
+  S.hub.style.transform = `translate(${tx - 720}px, ${ty - 450}px) scale(${120 / 176})`;
+  S.hub.style.opacity = 1;
+  S.hub.getBoundingClientRect();
+  scene.hub.classList.remove('show');
+  $('#mapLayer').classList.add('out');
+  S.hub.style.transition = 'transform 1.5s cubic-bezier(.5,0,.2,1)';
+  S.hub.style.transform = 'none';
+  await wait(350);
+  $('#all').classList.remove('leave');
+  await wait(1300);
+  $('#mapLayer').classList.remove('show', 'out');
+  if (mapReady) map.stop();
+}
+
+async function groupMessage() {
+  const g = S.group, part = s => $(s, g);
+  await wait(300);
+  S.hub.classList.add('busy');
+  show(g); draw(S.dmTether);
+  part('.typingwrap').classList.add('open');
+  await wait(1300);
+  part('.typingwrap').classList.remove('open');
+  part('.msg').classList.add('open');
+  S.hub.classList.remove('busy');
+  await wait(700);
+  // delivered to you and both matches
+  for (const p of [S.request, ...S.agents.filter(a => a.ok).map(a => a.pill)]) {
+    p.classList.remove('ping'); p.getBoundingClientRect(); p.classList.add('ping');
+    await wait(180);
+  }
+  part('.sentwrap').classList.add('open');
+}
+
+/* ============ fit + controls ============ */
+function fit() {
+  const s = Math.min(innerWidth / 1440, innerHeight / 900);
+  $('#stage').style.transform = `translate(-50%, -50%) scale(${s})`;
+}
+addEventListener('resize', fit); fit();
+addEventListener('keydown', e => {
+  if (e.code === 'Space') { paused = !paused; e.preventDefault(); }
+  if (e.key === 'r') { paused = false; run(); }
+  if (e.key === 'f') { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); }
+});
+let mt; addEventListener('mousemove', () => { document.body.classList.add('mouse'); clearTimeout(mt); mt = setTimeout(() => document.body.classList.remove('mouse'), 1800); });
+
+initMap();
+document.fonts.ready.then(run);
+</script>
+</body>
+</html>
