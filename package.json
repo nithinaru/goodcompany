@@ -1,0 +1,23 @@
+{
+  "name": "good-company",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "smoke": "bash scripts/smoke.sh",
+    "eval:baseline": "tsx eval/run_baseline.ts",
+    "eval:score": "tsx eval/score.ts"
+  },
+  "dependencies": {
+    "next": "^15.5.29",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.6",
+    "@types/react": "19.1.13",
+    "tsx": "4.20.5",
+    "typescript": "5.9.2"
+  }
+}
