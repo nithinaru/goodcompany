@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { RAW_CONTEXTS } from "@/eval/fixtures";
 import savedRun from "@/eval/out/coordinated_run.json";
 import savedScore from "@/eval/out/results.json";
+import { BlurText, CountUp, ShinyText, SpotlightCard } from "./bits";
 
 type Ev = { seq: number; type: string; botId: string; at: string; data: any };
 const PEOPLE = ["nithin", "maya", "daniel", "priya"] as const;
@@ -138,7 +139,7 @@ export default function Demo() {
     <main className="wrap">
       <header className="top">
         <div>
-          <h1>Good Company</h1>
+          <h1><BlurText text="Good Company" delay={120} /></h1>
           <p>Tell your agent you&apos;re free for dinner. It finds the right people, and their agents agree on a plan. No group chat.</p>
         </div>
         <div className="controls">
@@ -157,7 +158,7 @@ export default function Demo() {
               const s = agentState(p);
               const c = st.cards[p];
               return (
-                <div key={p} className={`agent ${s.active ? "active" : ""}`}>
+                <SpotlightCard key={p} className={`agent ${s.active ? "active" : ""}`}>
                   <div className="agent-head">
                     <div className="avatar">{NAMES[p][0]}</div>
                     <div>
@@ -174,14 +175,14 @@ export default function Demo() {
                       {c.dietary.map((d: string) => <span key={d} className="chip">{d}</span>)}
                     </div>
                   )}
-                </div>
+                </SpotlightCard>
               );
             })}
           </div>
         </section>
 
         <section className="center">
-          <div className="panel">
+          <SpotlightCard className="panel">
             <div className="chief">
               <div className={`orb ${st.plan ? "" : "active"}`} />
               <div>
@@ -190,10 +191,10 @@ export default function Demo() {
                 <div style={{ marginTop: 4 }}>{chiefStatus}</div>
               </div>
             </div>
-          </div>
+          </SpotlightCard>
 
           {st.current && !st.plan && (
-            <div className="panel" key={st.current.id} style={{ animation: "rise .5s both" }}>
+            <SpotlightCard className="panel" key={st.current.id} style={{ animation: "rise .5s both" }}>
               <p className="label">Current proposal</p>
               <div className="versions">
                 {[1, 2, 3].map((v) => (
@@ -224,12 +225,12 @@ export default function Demo() {
                   );
                 })}
               </div>
-            </div>
+            </SpotlightCard>
           )}
 
           {st.plan && (
-            <div className="panel plan reveal" key="plan">
-              <div className="plan-title">✓ Everyone agreed · in {st.current?.version ?? 1} rounds</div>
+            <SpotlightCard className="panel plan reveal" key="plan">
+              <div className="plan-title"><span className="dot ok" /><ShinyText text={`Everyone agreed · ${st.current?.version ?? 1} rounds`} /></div>
               <div className="venue" style={{ marginTop: 8 }}>{st.plan.place.name}</div>
               <div className="sub" style={{ marginTop: 4 }}>
                 {st.plan.place.url ? <a href={st.plan.place.url} target="_blank" rel="noreferrer" style={{ color: "inherit" }}>{st.plan.place.address}</a> : st.plan.place.address}
@@ -251,7 +252,7 @@ export default function Demo() {
                   </div>
                 </>
               )}
-            </div>
+            </SpotlightCard>
           )}
         </section>
 
@@ -263,7 +264,7 @@ export default function Demo() {
               const m = describe(e, cardsAll);
               if (!m) return null;
               return (
-                <div key={e.seq} className={`msg ${e.botId === "chief" ? "chief" : ""}`}>
+                <div key={e.seq} className={`msg ${e.botId === "chief" ? "from-chief" : ""}`}>
                   <div className="msg-top">
                     <span className="who">{m.who}</span>
                     <span className="when">{new Date(e.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}</span>
@@ -278,7 +279,7 @@ export default function Demo() {
       </div>
 
       <div className="lower">
-        <section className="panel">
+        <SpotlightCard className="panel">
           <h2 className="section-title">What the agent knows vs. what it shared</h2>
           <p className="sub">Raw context never leaves the personal agent. The highlighted details are private: the group never sees them.</p>
           <div className="tabs">
@@ -306,34 +307,34 @@ export default function Demo() {
               ) : <Thinking text="Card not posted yet" />}
             </div>
           </div>
-        </section>
+        </SpotlightCard>
 
-        <section className="panel">
+        <SpotlightCard className="panel">
           <h2 className="section-title">Scoreboard</h2>
           <p className="sub">Same task, same Grok models. One agent with everyone&apos;s raw data vs. our coordinated agents.</p>
           {bE && cE ? (
             <>
               <div className="bars">
                 <div className="bar-row">
-                  <div className="bar-lab"><span>Single agent: private facts it read</span><b>{bE.count} / {bE.total}</b></div>
+                  <div className="bar-lab"><span>Single agent: private facts it read</span><b><CountUp to={bE.count} /> / {bE.total}</b></div>
                   <div className="bar"><span style={{ width: `${(bE.count / bE.total) * 100}%` }} /></div>
                 </div>
                 <div className="bar-row">
-                  <div className="bar-lab"><span>Good Company chief: private facts it read</span><b>{cE.count} / {cE.total}</b></div>
+                  <div className="bar-lab"><span>Good Company chief: private facts it read</span><b><CountUp to={cE.count} /> / {cE.total}</b></div>
                   <div className="bar ours"><span style={{ width: `${Math.max(2, (cE.count / cE.total) * 100)}%` }} /></div>
                 </div>
               </div>
               <div className="stats">
                 <div className="stat"><b>{sb.coordinated?.violationCount ?? 0}</b>constraint violations</div>
                 <div className="stat"><b>{sb.coordinated?.leakCount ?? 0}</b>privacy leaks</div>
-                <div className="stat"><b>{sb.coordinated?.rounds ?? "-"}</b>rounds to agree</div>
+                <div className="stat"><b><CountUp to={sb.coordinated?.rounds ?? 0} /></b>rounds to agree</div>
               </div>
               <p className="sub" style={{ marginTop: 14, marginBottom: 0 }}>
                 The single agent kept secrets because it chose to. Ours can&apos;t leak them: the chief never has them, and the API rejects any free-text reason.
               </p>
             </>
           ) : <Thinking text="Waiting for eval results" />}
-        </section>
+        </SpotlightCard>
       </div>
 
       <p className="foot">Demo sandbox: 4 personal Grok Bots + 1 chief Grok Bot coordinating over a shared API. Roadmap: on-device distillation, encrypted Cards, cross-account bots, reservations with your approval.</p>
