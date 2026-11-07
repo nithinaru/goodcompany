@@ -2,7 +2,14 @@
 // Usage: npx tsx eval/score.ts   (env: SERVICE_URL, ADMIN_TOKEN optional)
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
-import { CONSTRAINTS, TRAP_KEYWORDS, AREA_KEYWORDS, type PersonId } from "./fixtures";
+import { CONSTRAINTS, TRAP_KEYWORDS, AREA_KEYWORDS, PRIVATE_FACTS, RAW_CONTEXTS, type PersonId } from "./fixtures";
+
+// Exposure: which private facts appear anywhere in the text the coordinator could read.
+type Exposure = { count: number; total: number; facts: { id: string; label: string }[] };
+function exposure(seen: string): Exposure {
+  const facts = PRIVATE_FACTS.filter((f) => f.pattern.test(seen)).map(({ id, label }) => ({ id, label }));
+  return { count: facts.length, total: PRIVATE_FACTS.length, facts };
+}
 
 const HERE = dirname(resolve(process.argv[1] || "eval/score.ts"));
 const ROOT = join(HERE, "..");
@@ -33,6 +40,7 @@ type Run = {
   rounds: number;
   manualHandoffs: number; // constant 0: neither pipeline has a human-in-the-loop step
   success: boolean;
+  exposure?: Exposure;
   plan?: any;
   note?: string;
 };
@@ -175,6 +183,12 @@ function extractJson(text: string): any | null {
 
 function scoreBaselines(): Run[] {
   if (!existsSync(OUT)) return [];
+  // The baseline prompt contains every raw context, so the single agent reads all of them.
+  const baselineExposure = exposure(Object.values(RAW_CONTEXTS).join("\n"));
+  return scoreBaselineFiles().map((r) => ({ ...r, exposure: baselineExposure }));
+}
+
+function scoreBaselineFiles(): Run[] {
   const files = readdirSync(OUT).filter((f) => /^baseline_.+\.json$/.test(f)).sort();
   return files.map((f) => {
     const id = f.replace(/^baseline_|\.json$/g, "");
@@ -233,13 +247,17 @@ async function scoreCoordinated(base: string): Promise<Run> {
   const rounds = proposals.length ? Math.max(proposals.length, ...proposals.map((p) => Number(p?.version) || 0)) : 0;
 
   const note = errors.length ? `service fetch issues: ${errors.join("; ")}` : undefined;
+  // The chief only ever reads the service: cards, proposals, responses, plan. That is its whole view.
+  const exp = exposure(visible);
   if (!plan) {
     const last = proposals[proposals.length - 1] ?? null;
     return makeRun("coordinated", last, visible, rounds, false, {
+      exposure: exp,
       note: [note, last ? "no plan yet; scored latest proposal" : "no plan or proposal yet"].filter(Boolean).join("; "),
     });
   }
   return makeRun("coordinated", plan, visible, rounds, true, {
+    exposure: exp,
     plan: { time: plan.time, place: plan.place, estCostPerPerson: plan.estCostPerPerson },
     ...(note ? { note } : {}),
   });
@@ -257,15 +275,19 @@ async function main() {
   const n = baselineRuns.length || 1;
   const avg = (x: number) => (baselineRuns.length > 1 ? `${(x / n).toFixed(1)} avg over ${baselineRuns.length} runs` : String(x));
   const cV = coordinated.violationCount, cL = coordinated.leakCount;
+  const bE = baselineRuns[0]?.exposure ?? exposure(Object.values(RAW_CONTEXTS).join("\n"));
+  const cE = coordinated.exposure ?? exposure("");
 
   const results = {
     generatedAt: new Date().toISOString(),
-    baseline: { runs: baselineRuns, totals: { violations: bV, leaks: bL } },
-    coordinated: { ...coordinated, runs: [coordinated], totals: { violations: cV, leaks: cL } },
+    baseline: { runs: baselineRuns, totals: { violations: bV, leaks: bL, exposure: bE.count } },
+    coordinated: { ...coordinated, runs: [coordinated], totals: { violations: cV, leaks: cL, exposure: cE.count } },
+    exposure: { baseline: bE, coordinated: cE },
     summary:
-      `One agent with everyone's data: ${avg(bV)} violations, ${avg(bL)} privacy leaks. ` +
-      `Ours: ${cV} violations and ${cL} leaks` +
-      (coordinated.success ? ` in ${coordinated.rounds} round(s).` : " (no agreed plan yet)."),
+      `One agent with everyone's data: ${avg(bV)} violations, ${avg(bL)} privacy leaks, ` +
+      `but it read ${bE.count} of ${bE.total} private facts. ` +
+      `Ours: ${cV} violations, ${cL} leaks, and the chief read ${cE.count} of ${cE.total}` +
+      (coordinated.success ? `, agreed in ${coordinated.rounds} rounds.` : " (no agreed plan yet)."),
     notes: [
       "manualHandoffs is constant 0 for both sides (no human step in either pipeline).",
       "Leak detection is keyword-only; the LLM paraphrase judge is skipped.",
