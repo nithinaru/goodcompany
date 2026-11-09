@@ -8,7 +8,7 @@
 
 Tell your agent you're free. It finds people worth meeting, and their agents agree on a time, a place and a budget. You never join a group chat, and nobody's private details leave their own agent.
 
-The GIF above is a real run with five Grok Bots: four personal agents and one chief.
+The GIF above is a real run with five Grok Bots: four personal agents and one chief. For the full story, watch the [demo video](visualizer/good-company-visualizer.mp4) or see the [visualizer](visualizer/).
 
 ## How it works
 
